@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@actual-app/api": "file:/Users/tobi/Downloads/actual-api",
+    "@google-cloud/local-auth": "2.1.0",
+    "dotenv": "^16.3.1",
+    "googleapis": "105"
+  }
+}
