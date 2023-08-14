@@ -44,7 +44,6 @@ async function updateValues(auth, accountNamesAndBalances) {
 
   let accounts = await api.getAccounts();
 	const accountNamesAndBalances = (await Promise.all(accounts.filter((a) => !a.closed).map(async (account) => {
-		console.log(JSON.stringify(account));
     const transactions = await api.getTransactions(account.id)
     const balance = transactions.map((t) => t.amount).reduce((a, b) => a + b, 0)
     return [account.name, api.utils.amountToInteger(balance) / 10000]
@@ -57,7 +56,6 @@ async function updateValues(auth, accountNamesAndBalances) {
       return 1;
     return 0;
   });
-  console.log(accountNamesAndBalances);
   //await api.shutdown(); // fails for some reason
 
   const googleAuth = await authorize();
