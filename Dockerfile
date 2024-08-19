@@ -18,8 +18,11 @@ RUN apk add --no-cache bash curl tzdata && \
     echo "0 0 * * * node /usr/src/app/sync.js >> /var/log/cron.log 2>&1" > /etc/crontabs/root && \
     touch /var/log/cron.log
 
-# Expose a port if necessary (not needed for this script)
-# EXPOSE 8080
+# Default port (can be overridden by environment variable)
+ENV PORT=3000
 
-# Command to start cron and tail logs
-CMD ["sh", "-c", "crond && tail -f /var/log/cron.log"]
+# Expose the port configured by the PORT environment variable
+EXPOSE ${PORT}
+
+# Command to start cron and a basic HTTP server to keep the container running
+CMD ["sh", "-c", "crond && node -e \"require('http').createServer((_, res) => res.end('Running')).listen(process.env.PORT)\" && tail -f /var/log/cron.log"]
