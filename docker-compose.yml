@@ -4,6 +4,8 @@ services:
   actual-budget-sync:
     build: .
     container_name: actual-budget-sync
+    ports:
+      - "${PORT}:${PORT}"
     environment:
       GOOGLE_APPLICATION_CREDENTIALS: "/run/secrets/google_application_credentials"
       ACTUAL_SERVER_URL: "${ACTUAL_SERVER_URL}"
@@ -14,6 +16,7 @@ services:
       ACCOUNTS_BALANCES_RANGE: "${ACCOUNTS_BALANCES_RANGE}"
       PRIOR_MONTH_RANGE: "${PRIOR_MONTH_RANGE}"
       CURRENT_MONTH_RANGE: "${CURRENT_MONTH_RANGE}"
+      PORT: "${PORT}"
     secrets:
       - google_application_credentials
 
