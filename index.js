@@ -1,4 +1,4 @@
-require('dotenv').config()
+require('dotenv').config();
 
 const fs = require('fs').promises;
 const path = require('path');
@@ -7,10 +7,15 @@ const { google } = require('googleapis');
 const api = require('@actual-app/api');
 
 async function authorize() {
-  return new google.auth.GoogleAuth({
-    keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS, // Assuming you have a service account
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
+  try {
+    return new google.auth.GoogleAuth({
+      keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS, 
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+  } catch (error) {
+    console.error('Error authorizing Google API:', error);
+    process.exit(1);
+  }
 }
 
 async function ensureSheetExists(auth, spreadsheetId, title) {
@@ -35,69 +40,90 @@ async function ensureSheetExists(auth, spreadsheetId, title) {
 }
 
 async function updateSheet(auth, spreadsheetId, range, values) {
-  const sheets = google.sheets({ version: 'v4', auth });
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range,
-    valueInputOption: "USER_ENTERED",
-    requestBody: { values }
-  });
+  try {
+    const sheets = google.sheets({ version: 'v4', auth });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range,
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values }
+    });
+  } catch (error) {
+    console.error(`Error updating sheet with range ${range}:`, error);
+  }
 }
 
-async function getCurrentMonthData() {
-  const currentMonth = await api.getBudgetMonth(new Date().toISOString().slice(0, 7));
-  const categories = await api.getCategories();
-  const categoryGroups = await api.getCategoryGroups();
-  
-  // Mapping categories to their groups
-  const categoriesWithGroups = categories.map(category => {
-    const group = categoryGroups.find(group => group.id === category.group_id) || {};
-    return { ...category, groupName: group.name };
-  });
+async function getMonthData(date) {
+  try {
+    const month = await api.getBudgetMonth(date);
+    const categories = await api.getCategories();
+    const categoryGroups = await api.getCategoryGroups();
 
-  // Preparing data for the sheet
-  const dataForSheet = categoriesWithGroups.map(category => [
-    category.groupName,
-    category.name,
-    currentMonth.budgets[category.id]?.budgeted || 0,
-    currentMonth.budgets[category.id]?.activity || 0,
-    currentMonth.budgets[category.id]?.balance || 0,
-  ]);
+    const categoriesWithGroups = categories.map(category => {
+      const group = categoryGroups.find(group => group.id === category.group_id) || {};
+      return { ...category, groupName: group.name };
+    });
 
-  return dataForSheet;
+    const dataForSheet = categoriesWithGroups.map(category => [
+      category.groupName,
+      category.name,
+      month.budgets[category.id]?.budgeted || 0,
+      month.budgets[category.id]?.activity || 0,
+      month.budgets[category.id]?.balance || 0,
+    ]);
+
+    return dataForSheet;
+  } catch (error) {
+    console.error('Error fetching month data:', error);
+    return [];
+  }
 }
 
 (async () => {
-  await api.init({
-    serverURL: process.env.ACTUAL_SERVER_URL,
-    password: process.env.ACTUAL_SERVER_PASSWORD,
-  });
+  try {
+    await api.init({
+      serverURL: process.env.ACTUAL_SERVER_URL,
+      password: process.env.ACTUAL_SERVER_PASSWORD,
+    });
 
-  await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, {password: process.env.ACTUAL_BUDGET_PASSWORD});
+    await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_BUDGET_PASSWORD });
 
-  let accounts = await api.getAccounts();
-  const accountNamesAndBalances = accounts.filter(a => !a.closed).map(account => [
-    account.name,
-    account.balance / 10000 // Assuming the balance needs to be formatted this way
-  ]);
+    const accounts = await api.getAccounts();
+    const accountNamesAndBalances = accounts.filter(a => !a.closed).map(account => [
+      account.name,
+      account.balance / 10000 
+    ]);
 
-  const categoriesData = await getCurrentMonthData();
+    const currentDate = new Date();
+    const priorMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1).toISOString().slice(0, 7);
+    const currentMonth = currentDate.toISOString().slice(0, 7);
 
-  const auth = await authorize();
-  const spreadsheetId = process.env.SPREADSHEET_ID;
-  const accountsRange = process.env.ACCOUNTS_BALANCES_RANGE;
-  const categoriesRange = process.env.CATEGORIES_DETAILS_RANGE;
+    const priorMonthData = await getMonthData(priorMonth);
+    const currentMonthData = await getMonthData(currentMonth);
 
-  // Ensure or create the sheets based on the provided ranges
-  const accountsSheetTitle = accountsRange.split('!')[0];
-  const categoriesSheetTitle = categoriesRange.split('!')[0];
-  await ensureSheetExists(auth, spreadsheetId, accountsSheetTitle);
-  await ensureSheetExists(auth, spreadsheetId, categoriesSheetTitle);;
+    const auth = await authorize();
+    const spreadsheetId = process.env.SPREADSHEET_ID;
 
-  // Update accounts and balances in the first sheet
-  await updateSheet(auth, spreadsheetId, accountsRange, accountNamesAndBalances);
+    const accountsRange = process.env.ACCOUNTS_BALANCES_RANGE || 'Sheet1!A1:B';
+    const priorMonthRange = process.env.PRIOR_MONTH_RANGE || 'Sheet2!A1:E';
+    const currentMonthRange = process.env.CURRENT_MONTH_RANGE || 'Sheet3!A1:E';
 
-  // Update categories data in the second sheet
-  await updateSheet(auth, spreadsheetId, categoriesRange, categoriesData);
+    const accountsSheetTitle = accountsRange.split('!')[0];
+    const priorMonthSheetTitle = priorMonthRange.split('!')[0];
+    const currentMonthSheetTitle = currentMonthRange.split('!')[0];
 
-})().then(() => { console.log("Done"); process.exit(); }).catch(console.error);
+    await ensureSheetExists(auth, spreadsheetId, accountsSheetTitle);
+    await ensureSheetExists(auth, spreadsheetId, priorMonthSheetTitle);
+    await ensureSheetExists(auth, spreadsheetId, currentMonthSheetTitle);
+
+    await updateSheet(auth, spreadsheetId, accountsRange, accountNamesAndBalances);
+    await updateSheet(auth, spreadsheetId, priorMonthRange, priorMonthData);
+    await updateSheet(auth, spreadsheetId, currentMonthRange, currentMonthData);
+
+    console.log("Data sync completed successfully.");
+    process.exit(0);
+  } catch (error) {
+    console.error('Error in the main process:', error);
+    process.exit(1);
+  }
+})();
