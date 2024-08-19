@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  actual-budget-sync:
+    build: .
+    container_name: actual-budget-sync
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: "/run/secrets/google_application_credentials"
+      ACTUAL_SERVER_URL: "${ACTUAL_SERVER_URL}"
+      ACTUAL_SERVER_PASSWORD: "${ACTUAL_SERVER_PASSWORD}"
+      ACTUAL_BUDGET_ID: "${ACTUAL_BUDGET_ID}"
+      ACTUAL_BUDGET_PASSWORD: "${ACTUAL_BUDGET_PASSWORD}"
+      SPREADSHEET_ID: "${SPREADSHEET_ID}"
+      ACCOUNTS_BALANCES_RANGE: "${ACCOUNTS_BALANCES_RANGE}"
+      PRIOR_MONTH_RANGE: "${PRIOR_MONTH_RANGE}"
+      CURRENT_MONTH_RANGE: "${CURRENT_MONTH_RANGE}"
+    secrets:
+      - google_application_credentials
+
+secrets:
+  google_application_credentials:
+    file: ./path_to_your_credentials.json
