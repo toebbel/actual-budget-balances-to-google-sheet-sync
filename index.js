@@ -121,9 +121,10 @@ async function getMonthData(date) {
     await updateSheet(auth, spreadsheetId, currentMonthRange, currentMonthData);
 
     console.log("Data sync completed successfully.");
-    process.exit(0);
   } catch (error) {
     console.error('Error in the main process:', error);
-    process.exit(1);
+  } finally {
+    await api.shutdown(); // Ensure proper shutdown
+    process.exit(0);
   }
 })();
