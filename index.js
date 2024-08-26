@@ -16,7 +16,6 @@ const requiredEnvVars = [
   'PRIOR_MONTH_RANGE',
   'CURRENT_MONTH_RANGE',
   'ACTUAL_BUDGET_ID',
-  'ACTUAL_BUDGET_PASSWORD',
 ];
 requiredEnvVars.forEach((varName) => {
   if (!process.env[varName]) {
@@ -120,7 +119,7 @@ async function getMonthData(date) {
     });
 
     console.log('Downloading budget data...');
-    await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_BUDGET_PASSWORD });
+    await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_SERVER_PASSWORD });
 
     console.log('Fetching account balances...');
     const accounts = await api.getAccounts();
