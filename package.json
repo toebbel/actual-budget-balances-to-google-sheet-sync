@@ -1,8 +1,13 @@
 {
   "dependencies": {
-    "@actual-app/api": "file:/Users/tobi/Downloads/actual-api",
+    "@actual-app/api": "^6.9.0",
+    "express": "^4.18.2",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0"
     "@google-cloud/local-auth": "2.1.0",
-    "dotenv": "^16.3.1",
     "googleapis": "105"
+  },
+  "devDependencies": {
+    "dotenv": "^16.3.1"
   }
 }
