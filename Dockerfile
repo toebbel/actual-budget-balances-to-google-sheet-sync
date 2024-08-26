@@ -17,7 +17,7 @@ COPY . .
 RUN apk add --no-cache bash curl tzdata
 
 # Set up a cron job to run the sync script daily
-RUN echo "0 0 * * * node /usr/src/app/sync.js >> /var/log/cron.log 2>&1" > /etc/crontabs/root && \
+RUN echo "0 0 * * * node /usr/src/app/index.js >> /var/log/cron.log 2>&1" > /etc/crontabs/root && \
     touch /var/log/cron.log
 
 # Default port (can be overridden by environment variable)
