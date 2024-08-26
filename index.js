@@ -15,6 +15,8 @@ const requiredEnvVars = [
   'ACCOUNTS_BALANCES_RANGE',
   'PRIOR_MONTH_RANGE',
   'CURRENT_MONTH_RANGE',
+  'ACTUAL_BUDGET_ID',
+  'ACTUAL_BUDGET_PASSWORD',
 ];
 requiredEnvVars.forEach((varName) => {
   if (!process.env[varName]) {
@@ -31,7 +33,7 @@ async function authorize() {
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
   } catch (error) {
-    console.error('Error authorizing Google API:', error);
+    console.error('Error authorizing Google API:', error.message);
     process.exit(1);
   }
 }
@@ -61,7 +63,8 @@ async function ensureSheetExists(auth, spreadsheetId, title) {
       console.log(`Sheet "${title}" already exists.`);
     }
   } catch (error) {
-    console.error(`Error ensuring sheet "${title}" exists:`, error);
+    console.error(`Error ensuring sheet "${title}" exists: ${error.message}`);
+    process.exit(1);
   }
 }
 
@@ -77,7 +80,7 @@ async function updateSheet(auth, spreadsheetId, range, values) {
     });
     console.log(`Sheet "${range}" updated successfully.`);
   } catch (error) {
-    console.error(`Error updating sheet with range "${range}":`, error);
+    console.error(`Error updating sheet with range "${range}": ${error.message}`);
   }
 }
 
@@ -103,7 +106,7 @@ async function getMonthData(date) {
 
     return dataForSheet;
   } catch (error) {
-    console.error('Error fetching month data:', error);
+    console.error('Error fetching month data:', error.message);
     return [];
   }
 }
@@ -123,12 +126,12 @@ async function getMonthData(date) {
     const accounts = await api.getAccounts();
     const accountNamesAndBalances = accounts.filter(a => !a.closed).map(account => [
       account.name,
-      account.balance / 10000 
+      account.balance / 100 // Assuming balance is in cents, so dividing by 100
     ]);
 
     const currentDate = new Date();
-    const priorMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1).toISOString().slice(0, 7);
-    const currentMonth = currentDate.toISOString().slice(0, 7);
+    const priorMonth = new Date(Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
+    const currentMonth = new Date(Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth(), 1)).toISOString().slice(0, 7);
 
     const priorMonthData = await getMonthData(priorMonth);
     const currentMonthData = await getMonthData(currentMonth);
@@ -154,10 +157,14 @@ async function getMonthData(date) {
 
     console.log("Data sync completed successfully.");
   } catch (error) {
-    console.error('Error in the main process:', error);
+    console.error('Error in the main process:', error.message);
   } finally {
     console.log('Shutting down Actual API...');
-    await api.shutdown(); // Ensure proper shutdown
+    try {
+      await api.shutdown(); // Ensure proper shutdown
+    } catch (shutdownError) {
+      console.error('Error shutting down Actual API:', shutdownError.message);
+    }
     process.exit(0);
   }
 })();
