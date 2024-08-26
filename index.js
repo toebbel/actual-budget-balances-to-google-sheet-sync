@@ -6,10 +6,28 @@ const process = require('process');
 const { google } = require('googleapis');
 const api = require('@actual-app/api');
 
+// Validate environment variables
+const requiredEnvVars = [
+  'GOOGLE_APPLICATION_CREDENTIALS',
+  'ACTUAL_SERVER_URL',
+  'ACTUAL_SERVER_PASSWORD',
+  'SPREADSHEET_ID',
+  'ACCOUNTS_BALANCES_RANGE',
+  'PRIOR_MONTH_RANGE',
+  'CURRENT_MONTH_RANGE',
+];
+requiredEnvVars.forEach((varName) => {
+  if (!process.env[varName]) {
+    console.error(`Error: Environment variable ${varName} is not defined.`);
+    process.exit(1);
+  }
+});
+
 async function authorize() {
   try {
+    console.log('Authorizing Google API...');
     return new google.auth.GoogleAuth({
-      keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS, 
+      keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
   } catch (error) {
@@ -19,28 +37,37 @@ async function authorize() {
 }
 
 async function ensureSheetExists(auth, spreadsheetId, title) {
-  const sheets = google.sheets({ version: 'v4', auth });
-  const { data } = await sheets.spreadsheets.get({ spreadsheetId });
-  const exists = data.sheets.some(sheet => sheet.properties.title === title);
-  
-  if (!exists) {
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: {
-        requests: [{
-          addSheet: {
-            properties: {
-              title,
+  try {
+    console.log(`Checking if sheet "${title}" exists...`);
+    const sheets = google.sheets({ version: 'v4', auth });
+    const { data } = await sheets.spreadsheets.get({ spreadsheetId });
+    const exists = data.sheets.some(sheet => sheet.properties.title === title);
+
+    if (!exists) {
+      console.log(`Sheet "${title}" not found, creating...`);
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [{
+            addSheet: {
+              properties: {
+                title,
+              },
             },
-          },
-        }],
-      },
-    });
+          }],
+        },
+      });
+    } else {
+      console.log(`Sheet "${title}" already exists.`);
+    }
+  } catch (error) {
+    console.error(`Error ensuring sheet "${title}" exists:`, error);
   }
 }
 
 async function updateSheet(auth, spreadsheetId, range, values) {
   try {
+    console.log(`Updating sheet with range "${range}"...`);
     const sheets = google.sheets({ version: 'v4', auth });
     await sheets.spreadsheets.values.update({
       spreadsheetId,
@@ -48,13 +75,15 @@ async function updateSheet(auth, spreadsheetId, range, values) {
       valueInputOption: "USER_ENTERED",
       requestBody: { values }
     });
+    console.log(`Sheet "${range}" updated successfully.`);
   } catch (error) {
-    console.error(`Error updating sheet with range ${range}:`, error);
+    console.error(`Error updating sheet with range "${range}":`, error);
   }
 }
 
 async function getMonthData(date) {
   try {
+    console.log(`Fetching data for month: ${date}...`);
     const month = await api.getBudgetMonth(date);
     const categories = await api.getCategories();
     const categoryGroups = await api.getCategoryGroups();
@@ -81,13 +110,16 @@ async function getMonthData(date) {
 
 (async () => {
   try {
+    console.log('Initializing Actual API...');
     await api.init({
       serverURL: process.env.ACTUAL_SERVER_URL,
       password: process.env.ACTUAL_SERVER_PASSWORD,
     });
 
+    console.log('Downloading budget data...');
     await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_BUDGET_PASSWORD });
 
+    console.log('Fetching account balances...');
     const accounts = await api.getAccounts();
     const accountNamesAndBalances = accounts.filter(a => !a.closed).map(account => [
       account.name,
@@ -124,6 +156,7 @@ async function getMonthData(date) {
   } catch (error) {
     console.error('Error in the main process:', error);
   } finally {
+    console.log('Shutting down Actual API...');
     await api.shutdown(); // Ensure proper shutdown
     process.exit(0);
   }
