@@ -120,9 +120,12 @@ async function getMonthData(date) {
 
     console.log('Downloading budget data...');
     const budgetDownload = await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_SERVER_PASSWORD });
-    if (!budgetDownload) {
-      throw new Error('Failed to download budget data');
+    if (!budgetDownload || typeof budgetDownload !== 'object') {
+      throw new Error('Failed to download budget data or invalid data received.');
     }
+    
+    // Add a log to check what is returned
+    console.log('Budget download result:', budgetDownload);
 
     console.log('Fetching account balances...');
     const accounts = await api.getAccounts();
