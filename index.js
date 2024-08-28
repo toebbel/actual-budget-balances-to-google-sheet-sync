@@ -86,7 +86,7 @@ async function updateSheet(auth, spreadsheetId, range, values) {
 async function getMonthData(date) {
   try {
     console.log(`Fetching data for month: ${date}...`);
-    const month = await api.getBudgetMonth(date);
+    const month = await api.getMonth(date);
     const categories = await api.getCategories();
     const categoryGroups = await api.getCategoryGroups();
 
@@ -98,9 +98,9 @@ async function getMonthData(date) {
     const dataForSheet = categoriesWithGroups.map(category => [
       category.groupName,
       category.name,
-      month.budgets[category.id]?.budgeted || 0,
-      month.budgets[category.id]?.activity || 0,
-      month.budgets[category.id]?.balance || 0,
+      month.s[category.id]?.ed || 0,
+      month.s[category.id]?.activity || 0,
+      month.s[category.id]?.balance || 0,
     ]);
 
     return dataForSheet;
@@ -118,8 +118,11 @@ async function getMonthData(date) {
       password: process.env.ACTUAL_SERVER_PASSWORD,
     });
 
-    console.log('Downloading budget data...');
-    await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_SERVER_PASSWORD });
+    console.log('Downloading  data...');
+    const budgetDownload = await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_SERVER_PASSWORD });
+    if (!budgetDownload) {
+      throw new Error('Failed to download budget data');
+    }
 
     console.log('Fetching account balances...');
     const accounts = await api.getAccounts();
@@ -129,10 +132,14 @@ async function getMonthData(date) {
     ]);
 
     const currentDate = new Date();
+
     const priorMonth = new Date(Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
     const currentMonth = new Date(Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth(), 1)).toISOString().slice(0, 7);
 
     const priorMonthData = await getMonthData(priorMonth);
+    if (!priorMonthData || !Array.isArray(priorMonthData)) {
+      throw new Error('Failed to retrieve valid prior month data');
+    }
     const currentMonthData = await getMonthData(currentMonth);
 
     const auth = await authorize();
