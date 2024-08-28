@@ -119,9 +119,16 @@ async function getMonthData(date) {
     });
 
     console.log('Downloading budget data...');
-    const budgetDownload = await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_SERVER_PASSWORD });
-    if (!budgetDownload || typeof budgetDownload !== 'object') {
-      throw new Error('Failed to download budget data or invalid data received.');
+    try {
+        const budgetDownload = await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_SERVER_PASSWORD });
+        console.log('Budget download result:', budgetDownload);
+
+        if (!budgetDownload || typeof budgetDownload !== 'object') {
+          throw new Error('Failed to download budget data or invalid data received.');
+        }
+    } catch (error) {
+        console.error('Error downloading budget data:', error.message);
+        throw error;
     }
     
     // Add a log to check what is returned
@@ -191,6 +198,13 @@ async function getMonthData(date) {
     console.log("Data sync completed successfully.");
   } catch (error) {
     console.error('Error in the main process:', error.message);
+
+    if (error.message.includes('timestamp')) {
+      console.error('It appears the data is missing a timestamp. This may indicate incomplete or corrupted data.');
+    }
+
+    // Optionally, provide fallback logic or more error handling here.
+
   } finally {
     console.log('Shutting down Actual API...');
     try {
