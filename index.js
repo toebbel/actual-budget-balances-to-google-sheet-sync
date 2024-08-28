@@ -118,7 +118,7 @@ async function getMonthData(date) {
       password: process.env.ACTUAL_SERVER_PASSWORD,
     });
 
-    console.log('Downloading  data...');
+    console.log('Downloading budget data...');
     const budgetDownload = await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_SERVER_PASSWORD });
     if (!budgetDownload) {
       throw new Error('Failed to download budget data');
@@ -126,10 +126,30 @@ async function getMonthData(date) {
 
     console.log('Fetching account balances...');
     const accounts = await api.getAccounts();
-    const accountNamesAndBalances = accounts.filter(a => !a.closed).map(account => [
-      account.name,
-      account.balance / 100 // Assuming balance is in cents, so dividing by 100
-    ]);
+    if (!accounts || !Array.isArray(accounts)) {
+      throw new Error('Failed to retrieve accounts.');
+    }
+
+    const accountNamesAndBalances = await Promise.all(accounts.filter(a => !a.closed).map(async account => {
+      console.log(`Processing account: ${account.name}`);
+      const transactions = await api.getTransactions(account.id);
+      
+      if (!transactions || !Array.isArray(transactions)) {
+        console.error(`No transactions found for account ${account.name}, skipping.`);
+        return null; // Skip this account
+      }
+
+      const balance = transactions.map(t => t.amount).reduce((a, b) => a + b, 0);
+      return [account.name, balance / 100]; // Assuming balance is in cents
+    }));
+    
+    const filteredAccountNamesAndBalances = accountNamesAndBalances.filter(Boolean).sort((a, b) => {
+      const nameA = a[0].replace("[", "");
+      const nameB = b[0].replace("[", "");
+      return nameA.localeCompare(nameB);
+    });
+
+    console.log('Account Names and Balances:', filteredAccountNamesAndBalances);
 
     const currentDate = new Date();
 
@@ -140,7 +160,11 @@ async function getMonthData(date) {
     if (!priorMonthData || !Array.isArray(priorMonthData)) {
       throw new Error('Failed to retrieve valid prior month data');
     }
+
     const currentMonthData = await getMonthData(currentMonth);
+    if (!currentMonthData || !Array.isArray(currentMonthData)) {
+      throw new Error('Failed to retrieve valid current month data');
+    }
 
     const auth = await authorize();
     const spreadsheetId = process.env.SPREADSHEET_ID;
@@ -157,7 +181,7 @@ async function getMonthData(date) {
     await ensureSheetExists(auth, spreadsheetId, priorMonthSheetTitle);
     await ensureSheetExists(auth, spreadsheetId, currentMonthSheetTitle);
 
-    await updateSheet(auth, spreadsheetId, accountsRange, accountNamesAndBalances);
+    await updateSheet(auth, spreadsheetId, accountsRange, filteredAccountNamesAndBalances);
     await updateSheet(auth, spreadsheetId, priorMonthRange, priorMonthData);
     await updateSheet(auth, spreadsheetId, currentMonthRange, currentMonthData);
 
