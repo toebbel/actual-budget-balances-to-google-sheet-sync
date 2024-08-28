@@ -24,28 +24,6 @@ requiredEnvVars.forEach((varName) => {
   }
 });
 
-async function migrateDatabase() {
-  try {
-    await api.init({
-      serverURL: process.env.ACTUAL_SERVER_URL,
-      password: process.env.ACTUAL_SERVER_PASSWORD,
-    });
-
-    console.log('Applying migrations...');
-    await api.migrate(); // This should run the migrations
-
-    console.log('Migrations applied successfully.');
-  } catch (error) {
-    console.error('Error applying migrations:', error.message);
-  } finally {
-    await api.shutdown();
-    process.exit(0);
-  }
-}
-
-migrateDatabase();
-
-
 async function authorize() {
   try {
     console.log('Authorizing Google API...');
