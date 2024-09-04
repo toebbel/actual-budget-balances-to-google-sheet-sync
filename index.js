@@ -119,40 +119,30 @@ async function getMonthData(date) {
     });
 
     console.log('Downloading budget data...');
-    try {
-        const budgetDownload = await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_SERVER_PASSWORD });
-        console.log('Budget download result:', budgetDownload);
-
-        if (!budgetDownload || typeof budgetDownload !== 'object') {
-          throw new Error('Failed to download budget data or invalid data received.');
-        }
-    } catch (error) {
-        console.error('Error downloading budget data:', error.message);
-        throw error;
+    const budgetDownload = await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_SERVER_PASSWORD });
+    if (!budgetDownload || typeof budgetDownload !== 'object') {
+      throw new Error('Failed to download budget data or invalid data received.');
     }
-    
-    // Add a log to check what is returned
     console.log('Budget download result:', budgetDownload);
 
-    console.log('Fetching account balances...');
+    console.log('Fetching accounts...');
     const accounts = await api.getAccounts();
-    if (!accounts || !Array.isArray(accounts)) {
-      throw new Error('Failed to retrieve accounts.');
-    }
+    console.log('Accounts fetched:', accounts);
 
     const accountNamesAndBalances = await Promise.all(accounts.filter(a => !a.closed).map(async account => {
-      console.log(`Processing account: ${account.name}`);
+      console.log(`Processing account: ${account.name}, id: ${account.id}`);
       const transactions = await api.getTransactions(account.id);
+      console.log(`Transactions for account ${account.name}:`, transactions);
       
       if (!transactions || !Array.isArray(transactions)) {
         console.error(`No transactions found for account ${account.name}, skipping.`);
         return null; // Skip this account
       }
 
-      const balance = transactions.map(t => t.amount).reduce((a, b) => a + b, 0);
+      const balance = (transactions || []).map(t => t.amount).reduce((a, b) => a + b, 0);
       return [account.name, balance / 100]; // Assuming balance is in cents
     }));
-    
+
     const filteredAccountNamesAndBalances = accountNamesAndBalances.filter(Boolean).sort((a, b) => {
       const nameA = a[0].replace("[", "");
       const nameB = b[0].replace("[", "");
