@@ -119,89 +119,48 @@ async function getMonthData(date) {
     });
 
     console.log('Downloading budget data...');
-    const budgetDownload = await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_SERVER_PASSWORD });
-    if (!budgetDownload || typeof budgetDownload !== 'object') {
+    const budgetDownload = await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { 
+      password: process.env.ACTUAL_BUDGET_PASSWORD 
+    });
+    
+    if (!budgetDownload) {
       throw new Error('Failed to download budget data or invalid data received.');
     }
-    console.log('Budget download result:', budgetDownload);
+
+    console.log('Synchronizing data...');
+    await api.sync();
 
     console.log('Fetching accounts...');
     const accounts = await api.getAccounts();
-    console.log('Accounts fetched:', accounts);
-
     const accountNamesAndBalances = await Promise.all(accounts.filter(a => !a.closed).map(async account => {
-      console.log(`Processing account: ${account.name}, id: ${account.id}`);
       const transactions = await api.getTransactions(account.id);
-      console.log(`Transactions for account ${account.name}:`, transactions);
-      
       if (!transactions || !Array.isArray(transactions)) {
-        console.error(`No transactions found for account ${account.name}, skipping.`);
-        return null; // Skip this account
+        console.error(`No valid transactions found for account ${account.name}, skipping.`);
+        return null;
       }
-
-      const balance = (transactions || []).map(t => t.amount).reduce((a, b) => a + b, 0);
-      return [account.name, balance / 100]; // Assuming balance is in cents
+      const balance = transactions.map(t => t.amount).reduce((a, b) => a + b, 0);
+      return [account.name, balance / 100]; // Balance in dollars
     }));
 
-    const filteredAccountNamesAndBalances = accountNamesAndBalances.filter(Boolean).sort((a, b) => {
-      const nameA = a[0].replace("[", "");
-      const nameB = b[0].replace("[", "");
-      return nameA.localeCompare(nameB);
-    });
-
-    console.log('Account Names and Balances:', filteredAccountNamesAndBalances);
-
-    const currentDate = new Date();
+    const filteredBalances = accountNamesAndBalances.filter(Boolean).sort((a, b) => a[0].localeCompare(b[0]));
 
     const priorMonth = new Date(Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
     const currentMonth = new Date(Date.UTC(currentDate.getUTCFullYear(), currentDate.getUTCMonth(), 1)).toISOString().slice(0, 7);
 
     const priorMonthData = await getMonthData(priorMonth);
-    if (!priorMonthData || !Array.isArray(priorMonthData)) {
-      throw new Error('Failed to retrieve valid prior month data');
-    }
-
     const currentMonthData = await getMonthData(currentMonth);
-    if (!currentMonthData || !Array.isArray(currentMonthData)) {
-      throw new Error('Failed to retrieve valid current month data');
-    }
 
     const auth = await authorize();
     const spreadsheetId = process.env.SPREADSHEET_ID;
 
-    const accountsRange = process.env.ACCOUNTS_BALANCES_RANGE || 'Sheet1!A1:B';
-    const priorMonthRange = process.env.PRIOR_MONTH_RANGE || 'Sheet2!A1:E';
-    const currentMonthRange = process.env.CURRENT_MONTH_RANGE || 'Sheet3!A1:E';
+    await updateSheet(auth, spreadsheetId, process.env.ACCOUNTS_BALANCES_RANGE, filteredBalances);
+    await updateSheet(auth, spreadsheetId, process.env.PRIOR_MONTH_RANGE, priorMonthData);
+    await updateSheet(auth, spreadsheetId, process.env.CURRENT_MONTH_RANGE, currentMonthData);
 
-    const accountsSheetTitle = accountsRange.split('!')[0];
-    const priorMonthSheetTitle = priorMonthRange.split('!')[0];
-    const currentMonthSheetTitle = currentMonthRange.split('!')[0];
-
-    await ensureSheetExists(auth, spreadsheetId, accountsSheetTitle);
-    await ensureSheetExists(auth, spreadsheetId, priorMonthSheetTitle);
-    await ensureSheetExists(auth, spreadsheetId, currentMonthSheetTitle);
-
-    await updateSheet(auth, spreadsheetId, accountsRange, filteredAccountNamesAndBalances);
-    await updateSheet(auth, spreadsheetId, priorMonthRange, priorMonthData);
-    await updateSheet(auth, spreadsheetId, currentMonthRange, currentMonthData);
-
-    console.log("Data sync completed successfully.");
+    console.log('Data sync completed.');
   } catch (error) {
-    console.error('Error in the main process:', error.message);
-
-    if (error.message.includes('timestamp')) {
-      console.error('It appears the data is missing a timestamp. This may indicate incomplete or corrupted data.');
-    }
-
-    // Optionally, provide fallback logic or more error handling here.
-
+    console.error('Error:', error.message);
   } finally {
-    console.log('Shutting down Actual API...');
-    try {
-      await api.shutdown(); // Ensure proper shutdown
-    } catch (shutdownError) {
-      console.error('Error shutting down Actual API:', shutdownError.message);
-    }
-    process.exit(0);
+    await api.shutdown();
   }
 })();
