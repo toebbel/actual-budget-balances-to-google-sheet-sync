@@ -1,9 +1,10 @@
 {
   "dependencies": {
-    "@actual-app/api": "6.2.1",
-    "@google-cloud/local-auth": "2.1.0",
-    "dotenv": "^16.3.1",
-    "googleapis": "105"
+    "@actual-app/api": "6.10.0",
+    "@google-cloud/local-auth": "3.0.1",
+    "csv-stringify": "^6.5.1",
+    "dotenv": "^16.4.5",
+    "googleapis": "140.0.0"
   },
   "scripts": {
     "sync": "rm -rf HaTo-* && node index.js"

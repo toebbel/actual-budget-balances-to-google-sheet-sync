@@ -1,5 +1,7 @@
+.venv/**
+.env/**
 .env
-node_modules
-credentials.json
+HaTo-e*
+node_modules/**
 yarn-error.log
-HaTo-*/**
+credentials.json
