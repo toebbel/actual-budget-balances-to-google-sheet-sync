@@ -5,3 +5,4 @@ HaTo-e*
 node_modules/**
 yarn-error.log
 credentials.json
+transactions.csv
