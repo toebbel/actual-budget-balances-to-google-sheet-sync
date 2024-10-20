@@ -59,11 +59,13 @@ class CategoryStats {
   group: string
   average: number
   weighted_average: number
-  constructor(name: string, group: string, average: number, weighted_average: number) {
+  budgeted: number
+  constructor(name: string, group: string, average: number, weighted_average: number, budgeted: number) {
     this.name = name;
     this.group = group;
     this.average = average;
     this.weighted_average = weighted_average;
+    this.budgeted = budgeted;
   }
 }
 
@@ -164,26 +166,16 @@ async function getAccountNamesAndBalances(): Promise<Array<AccountInfo>> {
   return accountNamesAndBalances
 }
 
-(async () => {
-  await api.init({
-    serverURL: process.env.ACTUAL_SERVER_URL,
-    password: process.env.ACTUAL_SERVER_PASSWORD,
-  });
-  await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, {password:process.env.ACTUAL_BUDGET_PASSWORD});
-
-  
-  //await api.shutdown(); // fails for some reason
-
-  
-  const categories = await loadCategories();
-  const ts = await getTransactions(categories, await loadPayees())
-  
+function saveTransactionsToFile(ts: Array<TransactionRow>) {
   const columns = ["account closed", "account off-budget", "account name", "category active", "transaction date", "payee", "category group", "category", "amount", "notes", "transfer id"];
   function arrayToCSV(data: Array<TransactionRow>) {
     const escape = (v: any) => `"${("" + v).replace(/"/g, '""')}"`;
     return data.map(row => [row.account_closed, row.account_off_budget, row.account_name, row.category_active, row.transaction_date, row.payee, row.category_group, row.category, row.amount, row.notes, row.transfer_id].map(escape).join(','));
   }
   fs.writeFileSync('./transactions.csv', [columns, ...arrayToCSV(ts)].join('\n'));
+}
+
+function calculateCategoryStats(categories: {[key: string]: Category}, ts: Array<TransactionRow>) {
   const oldest_transaction_ever = ts.map((t) => t.transaction_date).reduce((a, b) => a < b ? a : b, new Date());
   const num_weights = differenceInMonths(new Date(), oldest_transaction_ever) + 1;
   const weights = Array<number>(num_weights).fill(1);
@@ -191,6 +183,7 @@ async function getAccountNamesAndBalances(): Promise<Array<AccountInfo>> {
     weights[i] = 1 / (1 + (i - 12));
   }
   
+  // Calculate Stats Per Category
   const categoryStats = {} as {[key: string]: CategoryStats};
   Object.values(categories).filter(c => c.active).forEach((c: Category) => {
     console.log(`calculating stats for ${c.name}`)
@@ -204,16 +197,58 @@ async function getAccountNamesAndBalances(): Promise<Array<AccountInfo>> {
     })
     const weighted_average = months.map((m, i) => m * weights[i]).reduce((a, b) => a + b, 0) / weights.slice(0, months.length).reduce((a, b) => a + b, 0);
     const average = months.reduce((a, b) => a + b, 0) / months.length;
-    categoryStats[c.name] = new CategoryStats(c.name, c.group, average, weighted_average);
+    // when c.name contains a string like '300/m' then it means we spend 300 per month. Use a regex to extract the number
+    const monthly_budget = c.name.match(/(\d+(\.\d+)?)\/m/);
+    const quaterly_budget = c.name.match(/(\d+(\.\d+)?)\/qt/);
+    const yearly_budget = c.name.match(/(\d+(\.\d+)?)\/y/);
+    const budgeted = (Number(monthly_budget ? monthly_budget[1] : 0) + Number(quaterly_budget ? quaterly_budget[1] : 0) / 3 + Number(yearly_budget ? yearly_budget[1] : 0) / 12);
+
+    categoryStats[c.name] = new CategoryStats(c.name, c.group, average, weighted_average, budgeted);
   });
+  return categoryStats
+}
+
+function generateEarmarkedTransactions(ts: Array<TransactionRow>) {
+    const earmarkReceivingAccounts = ["[Santander] Sparkonto Tobi", "[Santander] Sparkonto+"]
+    // Extract all Transactions that are ear marked
+    const earmarkedTransactions = ts.filter((t) => 
+        earmarkReceivingAccounts.includes(t.account_name) &&
+        typeof t.notes === 'string' &&
+        t.notes?.includes("ear:")
+      ).map((t) => {
+        let [account_name, payee, amount] = [t.account_name, t.payee, t.amount, t.transfer_id]
+        if (!earmarkReceivingAccounts.includes(account_name)) {
+          const tmp = payee || "";
+          payee = account_name;
+          account_name = tmp;
+          amount = -amount;
+        }
+        return [account_name, t.transaction_date, payee, amount, t.notes?.replace("#ear:","")];
+    }).filter((t) => t !== null);
+    const columns = ["account name", "transaction date", "payee", "amount", "ear mark"];
+    return [columns, ...earmarkedTransactions];
+}
+
+(async () => {
+  await api.init({
+    serverURL: process.env.ACTUAL_SERVER_URL,
+    password: process.env.ACTUAL_SERVER_PASSWORD,
+  });
+  await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, {password:process.env.ACTUAL_BUDGET_PASSWORD});
   
+  const categories = await loadCategories();
+  const ts = await getTransactions(categories, await loadPayees())
+  
+  const categoryStats = calculateCategoryStats(categories, ts);
   const categoryNames = Object.keys(categoryStats).sort()
-  const categoryStatsCsv = categoryNames.map((name: string) => categoryStats[name]).map((c: CategoryStats) => [c.name, c.group, c.average, c.weighted_average]);
+  const categoryStatsCsv = categoryNames.map((name: string) => categoryStats[name]).map((c: CategoryStats) => [c.name, c.group, c.average, c.weighted_average, c.budgeted]);
 
   const accountBalances = await getAccountNamesAndBalances()
   const accountBalancesCsv = accountBalances.map((a: AccountInfo) => [a.name, a.balance]);
   const googleAuth = await authorize();
   await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_ACCOUNT_BALANCES_RANGE, accountBalancesCsv);
   await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_STATS_RANGE, categoryStatsCsv);
+  await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_EARMARKED_TRANSACTIONS_RANGE, generateEarmarkedTransactions(ts));
+  //saveTransactionsToFile(ts);
   
 })().then(() => { console.log("Done"); process.exit(); }).catch(console.error);
