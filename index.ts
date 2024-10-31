@@ -6,6 +6,9 @@ import * as api from '@actual-app/api';
 import fs from 'fs';
 import { GoogleAuth } from 'google-auth-library';
 
+
+import { command, flag, run, boolean } from 'cmd-ts';
+
  class TransactionRow {
   account_closed: Boolean
   account_off_budget: Boolean
@@ -88,7 +91,7 @@ async function updateValues(auth: GoogleAuth, spreadsheetId: String | undefined,
       values: values
     }
   } as sheets_v4.Params$Resource$Spreadsheets$Values$Update);
-  console.log('response from Google Sheets', res)
+  res.status === 200 ? console.log("✅ uploaded values") : console.error("❌ Failed to update values");
 }
 
 async function getTransactions(categoryLookup: {[key: string]: Category}, payeeLookup: {[key: string]: string}): Promise<Array<TransactionRow>> {
@@ -166,6 +169,16 @@ async function getAccountNamesAndBalances(): Promise<Array<AccountInfo>> {
   return accountNamesAndBalances
 }
 
+function categoryAges(ts: Array<TransactionRow>): {[key: string]: Date} {
+  const categoryAges = {} as {[key: string]: Date};
+  ts.forEach((t) => {
+    if (categoryAges[t.category as string] === undefined || categoryAges[t.category as string] > t.transaction_date) {
+      categoryAges[t.category as string] = t.transaction_date;
+    }
+  });
+  return categoryAges;
+}
+
 function saveTransactionsToFile(ts: Array<TransactionRow>) {
   const columns = ["account closed", "account off-budget", "account name", "category active", "transaction date", "payee", "category group", "category", "amount", "notes", "transfer id"];
   function arrayToCSV(data: Array<TransactionRow>) {
@@ -186,7 +199,6 @@ function calculateCategoryStats(categories: {[key: string]: Category}, ts: Array
   // Calculate Stats Per Category
   const categoryStats = {} as {[key: string]: CategoryStats};
   Object.values(categories).filter(c => c.active).forEach((c: Category) => {
-    console.log(`calculating stats for ${c.name}`)
     const transactions = ts.filter((t) => t.category === c.name);
     const oldest_transaction = transactions.map((t) => t.transaction_date).reduce((a, b) => a < b ? a : b, new Date());
     const number_months = differenceInMonths(new Date(), oldest_transaction) + 1;
@@ -208,47 +220,164 @@ function calculateCategoryStats(categories: {[key: string]: Category}, ts: Array
   return categoryStats
 }
 
+function normalizeTransactionByCadence(transaction: TransactionRow): TransactionRow {
+  const regex = /\#assume\-cadence\:(?<amountStr>\d+)(?<unitStr>[my])/g;
+  if (transaction.notes && transaction.notes.match(regex) === null || transaction.notes === null) {
+    return transaction;
+  }
+  const match = regex.exec(transaction.notes || "");
+  const { amountStr, unitStr } = match?.groups || {};
+  let normalizationMonths = parseInt(amountStr || "0");
+  if (unitStr == "y") {
+    normalizationMonths = normalizationMonths * 12;
+  }
+
+  const transactionAge = Math.max(1, differenceInMonths(new Date(), transaction.transaction_date));
+  if (transactionAge >= normalizationMonths) {
+    return transaction;
+  }
+  const normalizedAmount = transaction.amount / normalizationMonths * transactionAge;
+  console.log(`♻️ Normalized transaction ${transaction.payee?.trim()} (${transaction.notes.trim()}) from ${transaction.amount} SEK to ${Math.round(normalizedAmount)} SEK`);
+  return new TransactionRow(
+    transaction.account_closed,
+    transaction.account_off_budget,
+    transaction.account_name,
+    transaction.category_active,
+    transaction.transaction_date,
+    transaction.payee,
+    transaction.category_group,
+    transaction.category,
+    transaction.amount,
+    `normalized to ${normalizedAmount}` + transaction.notes,
+    transaction.transfer_id
+  );
+}
+
 function generateEarmarkedTransactions(ts: Array<TransactionRow>) {
-    const earmarkReceivingAccounts = ["[Santander] Sparkonto Tobi", "[Santander] Sparkonto+"]
+    const earmarkReceivingAccounts = ["[Santander] Sparkonto Tobi", "[Santander] Sparkonto+", "[Danske] Future Us", "[REV][EUR] Tobi Sparen"]
     // Extract all Transactions that are ear marked
     const earmarkedTransactions = ts.filter((t) => 
         earmarkReceivingAccounts.includes(t.account_name) &&
         typeof t.notes === 'string' &&
         t.notes?.includes("ear:")
       ).map((t) => {
-        let [account_name, payee, amount] = [t.account_name, t.payee, t.amount, t.transfer_id]
-        if (!earmarkReceivingAccounts.includes(account_name)) {
-          const tmp = payee || "";
-          payee = account_name;
-          account_name = tmp;
-          amount = -amount;
-        }
-        return [account_name, t.transaction_date, payee, amount, t.notes?.replace("#ear:","")];
+        return [t.account_name, t.transaction_date, t.payee, t.amount, t.notes?.replace("#ear:","")];
     }).filter((t) => t !== null);
     const columns = ["account name", "transaction date", "payee", "amount", "ear mark"];
     return [columns, ...earmarkedTransactions];
 }
 
-(async () => {
-  await api.init({
-    serverURL: process.env.ACTUAL_SERVER_URL,
-    password: process.env.ACTUAL_SERVER_PASSWORD,
-  });
-  await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, {password:process.env.ACTUAL_BUDGET_PASSWORD});
+// (async () => {
+//   await api.init({
+//     serverURL: process.env.ACTUAL_SERVER_URL,
+//     password: process.env.ACTUAL_SERVER_PASSWORD,
+//   });
+//   await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, {password:process.env.ACTUAL_BUDGET_PASSWORD});
   
-  const categories = await loadCategories();
-  const ts = await getTransactions(categories, await loadPayees())
+//   const categories = await loadCategories();
+//   const ts = await getTransactions(categories, await loadPayees())
   
-  const categoryStats = calculateCategoryStats(categories, ts);
-  const categoryNames = Object.keys(categoryStats).sort()
-  const categoryStatsCsv = categoryNames.map((name: string) => categoryStats[name]).map((c: CategoryStats) => [c.name, c.group, c.average, c.weighted_average, c.budgeted]);
+//   const categoryStats = calculateCategoryStats(categories, ts);
+//   const categoryNames = Object.keys(categoryStats).sort()
+//   const categoryStatsCsv = categoryNames.map((name: string) => categoryStats[name]).map((c: CategoryStats) => [c.name, c.group, c.average, c.weighted_average, c.budgeted]);
 
-  const accountBalances = await getAccountNamesAndBalances()
-  const accountBalancesCsv = accountBalances.map((a: AccountInfo) => [a.name, a.balance]);
-  const googleAuth = await authorize();
-  await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_ACCOUNT_BALANCES_RANGE, accountBalancesCsv);
-  await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_STATS_RANGE, categoryStatsCsv);
-  await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_EARMARKED_TRANSACTIONS_RANGE, generateEarmarkedTransactions(ts));
-  //saveTransactionsToFile(ts);
+//   const accountBalances = await getAccountNamesAndBalances()
+//   const accountBalancesCsv = accountBalances.map((a: AccountInfo) => [a.name, a.balance]);
+//   const googleAuth = await authorize();
+//   await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_ACCOUNT_BALANCES_RANGE, accountBalancesCsv);
+//   await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_STATS_RANGE, categoryStatsCsv);
+//   await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_EARMARKED_TRANSACTIONS_RANGE, generateEarmarkedTransactions(ts));
+//   //saveTransactionsToFile(ts);
   
-})().then(() => { console.log("Done"); process.exit(); }).catch(console.error);
+// })().then(() => { console.log("Done"); process.exit(); }).catch(console.error);
+
+// Define the flags
+const bankSyncFlag = flag({
+  type: boolean,
+  long: 'no-bank-sync',
+  defaultValue: () => false,
+  description: 'Sync with the bank (defaults to false)',
+});
+
+const calcCategoryStatsFlag = flag({
+  type: boolean,
+  long: 'no-calc-category-stats',
+  defaultValue: () => false,
+  description: 'Calculate category stats (defaults to false)',
+});
+
+const earMarkedTransactionsFlag = flag({
+  type: boolean,
+  long: 'no-ear-marked-transactions',
+  defaultValue: () => false,
+  description: 'Generate earmarked transactions (defaults to false)',
+});
+
+const accountBalancesFlag = flag({
+  type: boolean,
+  long: 'no-account-balances',
+  defaultValue: () => false,
+  description: 'Update account balances (defaults to false)',
+});
+
+// Define the command
+const mainCommand = command({
+  name: 'main',
+  args: {
+    noBankSync: bankSyncFlag,
+    noCalcCategoryStats: calcCategoryStatsFlag,
+    noEarMarkedTransactions: earMarkedTransactionsFlag,
+    noAccountBalances: accountBalancesFlag,
+  },
+  handler: async ({ noBankSync, noCalcCategoryStats, noEarMarkedTransactions, noAccountBalances }) => {
+    await api.init({
+      serverURL: process.env.ACTUAL_SERVER_URL,
+      password: process.env.ACTUAL_SERVER_PASSWORD,
+    });
+    console.log("👇 Downloading budget");
+    await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_BUDGET_PASSWORD });
+
+    if (!noBankSync) {
+      console.log(`🏦 Syncing accounts from bank`);
+      await Promise.all((await api.getAccounts()).filter((a: any) => !a.closed).map(async (account: any) => {
+        await api.runBankSync(account.id).catch().finally(() => console.log(`✅ Synced account ${account.name}`));
+      }));
+    }
+
+    if (!noAccountBalances) {
+      console.log("🏦 Updating account balances");
+      const accountBalances = await getAccountNamesAndBalances();
+      const accountBalancesCsv = accountBalances.map((a: AccountInfo) => [a.name, a.balance]);
+      const googleAuth = await authorize();
+      await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_ACCOUNT_BALANCES_RANGE, accountBalancesCsv);
+    }
+
+    if (!noCalcCategoryStats && !noEarMarkedTransactions) {
+      console.log("🏦 loading categories")
+      const categories = await loadCategories();
+      console.log("🏦 loading transactions")
+      const ts = (await getTransactions(categories, await loadPayees())).map((t) => normalizeTransactionByCadence(t));;
+
+      if (!noCalcCategoryStats) {
+        console.log("🏦 Calculating category stats");
+        const categoryStats = calculateCategoryStats(categories, ts);
+        const categoryNames = Object.keys(categoryStats).sort();
+        const categoryStatsCsv = categoryNames.map((name: string) => categoryStats[name]).map((c: CategoryStats) => [c.name, c.group, c.average, c.weighted_average, c.budgeted]);
+        const googleAuth = await authorize();
+        await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_STATS_RANGE, categoryStatsCsv);
+      }
+
+      if (!noEarMarkedTransactions) {
+        console.log("🏦 Generating earmarked transactions");
+        const googleAuth = await authorize();
+        await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_EARMARKED_TRANSACTIONS_RANGE, generateEarmarkedTransactions(ts));
+      }
+    }
+
+    console.log("🎉 Done");
+    process.exit();
+  },
+});
+
+// Run the command
+run(mainCommand, process.argv.slice(2)).catch(console.error);

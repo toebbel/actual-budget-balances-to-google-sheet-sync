@@ -2,13 +2,15 @@
   "dependencies": {
     "@actual-app/api": "6.10.0",
     "@google-cloud/local-auth": "3.0.1",
+    "cmd-ts": "^0.13.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
     "googleapis": "^144.0.0",
     "ts-node": "^10.9.2"
   },
   "scripts": {
-    "sync": "rm -rf HaTo-* && npx ts-node index.ts"
+    "full-sync": "rm -rf HaTo-* && npx ts-node index.ts",
+    "quick-sync": "rm -rf HaTo-* && npx ts-node index.ts --no-bank-sync"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",
