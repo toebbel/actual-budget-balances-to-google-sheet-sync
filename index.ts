@@ -296,28 +296,35 @@ const bankSyncFlag = flag({
   type: boolean,
   long: 'no-bank-sync',
   defaultValue: () => false,
-  description: 'Sync with the bank (defaults to false)',
+  description: 'Don\'t Sync with the bank (defaults to false)',
 });
 
 const calcCategoryStatsFlag = flag({
   type: boolean,
   long: 'no-calc-category-stats',
   defaultValue: () => false,
-  description: 'Calculate category stats (defaults to false)',
+  description: 'Don\'t Calculate category stats (defaults to false)',
 });
 
 const earMarkedTransactionsFlag = flag({
   type: boolean,
   long: 'no-ear-marked-transactions',
   defaultValue: () => false,
-  description: 'Generate earmarked transactions (defaults to false)',
+  description: 'Don\'t Generate earmarked transactions (defaults to false)',
 });
 
 const accountBalancesFlag = flag({
   type: boolean,
   long: 'no-account-balances',
   defaultValue: () => false,
-  description: 'Update account balances (defaults to false)',
+  description: 'Don\'t Update account balances (defaults to false)',
+});
+
+const noSankeyChartFlag = flag({
+  type: boolean,
+  long: 'no-sankey-chart',
+  defaultValue: () => false,
+  description: 'Don\'t generate Sankey chart (defaults to false)',
 });
 
 // Define the command
@@ -328,8 +335,9 @@ const mainCommand = command({
     noCalcCategoryStats: calcCategoryStatsFlag,
     noEarMarkedTransactions: earMarkedTransactionsFlag,
     noAccountBalances: accountBalancesFlag,
+    noSankeyChart: noSankeyChartFlag,
   },
-  handler: async ({ noBankSync, noCalcCategoryStats, noEarMarkedTransactions, noAccountBalances }) => {
+  handler: async ({ noBankSync, noCalcCategoryStats, noEarMarkedTransactions, noAccountBalances, noSankeyChart }) => {
     await api.init({
       serverURL: process.env.ACTUAL_SERVER_URL,
       password: process.env.ACTUAL_SERVER_PASSWORD,
@@ -352,7 +360,7 @@ const mainCommand = command({
       await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_ACCOUNT_BALANCES_RANGE, accountBalancesCsv);
     }
 
-    if (!noCalcCategoryStats && !noEarMarkedTransactions) {
+    if (!noCalcCategoryStats && !noEarMarkedTransactions && !noSankeyChart) {
       console.log("🏦 loading categories")
       const categories = await loadCategories();
       console.log("🏦 loading transactions")
@@ -365,6 +373,14 @@ const mainCommand = command({
         const categoryStatsCsv = categoryNames.map((name: string) => categoryStats[name]).map((c: CategoryStats) => [c.name, c.group, c.average, c.weighted_average, c.budgeted]);
         const googleAuth = await authorize();
         await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_STATS_RANGE, categoryStatsCsv);
+      }
+
+      if (!noSankeyChart) {
+        console.log("🏦 Generating Sankey chart");
+        const sankeyData = ts.map((t) => [t.category_group, t.category, t.amount]);
+        const sankeyColumns = ["From", "To", "Weight"];
+        const googleAuth = await authorize();
+        await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_SANKEY_RANGE, [sankeyColumns, ...sankeyData]);
       }
 
       if (!noEarMarkedTransactions) {
