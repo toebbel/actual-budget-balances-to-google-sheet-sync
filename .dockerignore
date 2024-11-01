@@ -1,0 +1,23 @@
+# Ignore node_modules directory
+node_modules
+
+# actual budget
+HaTo-*
+
+# Ignore log files
+npm-debug.log
+yarn-error.log
+
+# Ignore Dockerfile and .dockerignore
+Dockerfile
+.dockerignore
+
+# Ignore environment files
+.env
+
+# Ignore other unnecessary files
+.git
+.gitignore
+.vscode
+dist
+coverage
