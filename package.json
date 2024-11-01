@@ -6,14 +6,18 @@
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
     "googleapis": "^144.0.0",
-    "ts-node": "^10.9.2"
-  },
-  "scripts": {
-    "full-sync": "rm -rf HaTo-* && npx ts-node index.ts",
-    "quick-sync": "rm -rf HaTo-* && npx ts-node index.ts --no-bank-sync"
+    "ts-node": "^10.9.2",
+    "rimraf": "^5.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",
     "typescript": "^5.6.2"
+  },
+  "scripts": {
+    "clean": "rimraf HaTo-*",
+    "full-sync": "npm run clean && npx ts-node index.ts",
+    "quick-sync": "npm run clean && npx ts-node index.ts --no-bank-sync",
+    "build": "tsc",
+    "start": "npx ts-node index.ts"
   }
 }
