@@ -321,13 +321,6 @@ const accountBalancesFlag = flag({
   description: 'Don\'t Update account balances (defaults to false)',
 });
 
-const noSankeyChartFlag = flag({
-  type: boolean,
-  long: 'no-sankey-chart',
-  defaultValue: () => false,
-  description: 'Don\'t generate Sankey chart (defaults to false)',
-});
-
 // Define the command
 const mainCommand = command({
   name: 'main',
@@ -336,9 +329,8 @@ const mainCommand = command({
     noCalcCategoryStats: calcCategoryStatsFlag,
     noEarMarkedTransactions: earMarkedTransactionsFlag,
     noAccountBalances: accountBalancesFlag,
-    noSankeyChart: noSankeyChartFlag,
   },
-  handler: async ({ noBankSync, noCalcCategoryStats, noEarMarkedTransactions, noAccountBalances, noSankeyChart }) => {
+  handler: async ({ noBankSync, noCalcCategoryStats, noEarMarkedTransactions, noAccountBalances }) => {
     await api.init({
       serverURL: process.env.ACTUAL_SERVER_URL,
       password: process.env.ACTUAL_SERVER_PASSWORD,
@@ -361,7 +353,7 @@ const mainCommand = command({
       await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_ACCOUNT_BALANCES_RANGE, accountBalancesCsv);
     }
 
-    if (!noCalcCategoryStats || !noEarMarkedTransactions || !noSankeyChart) {
+    if (!noCalcCategoryStats || !noEarMarkedTransactions) {
       console.log("🏦 loading categories")
       const categories = await loadCategories();
       console.log("🏦 loading transactions")
@@ -374,58 +366,6 @@ const mainCommand = command({
         const categoryStatsCsv = categoryNames.map((name: string) => categoryStats[name]).map((c: CategoryStats) => [c.name, c.group, c.average, c.weighted_average, c.budgeted]);
         const googleAuth = await authorize();
         await updateValues(googleAuth, process.env.SPREADSHEET_ID, process.env.SPREADSHEET_STATS_RANGE, categoryStatsCsv);
-      }
-
-      if (!noSankeyChart) {
-        console.log("🏦 Generating Sankey chart");
-        const inGroup = (groupName: string) => (t: TransactionRow) => t.category_group === groupName && t.category_active === true && t.category !== null;
-        const inCategory = (category: string) => (t: TransactionRow) => t.category === category;
-        const isIncome = inGroup("Income");
-        const isExpense = (t: TransactionRow) => t.category_group !== "Income" && t.category !== null && t.category_group !== null;
-        
-        const byCategory = (t: TransactionRow) => t.category as string;
-        const byCategoryGroup = (t: TransactionRow) => t.category_group as string;
-        const byPayee = (t: TransactionRow) => t.payee as string;
-
-        const groupBy = (selector: (t: TransactionRow) => string) => {
-          return (acc: {[key: string]: number}, t: TransactionRow) => {
-            if (!selector(t)) {
-              return acc;
-            }
-            acc[selector(t)] = (acc[selector(t)] || 0) + t.amount;
-            return acc;
-          }
-        }
-
-        const toSankeyRows = (pre: string | null, groups: {[key: string]: number}, post: string | null) => {
-          return Object.entries(groups).map(([groupName, value]) => {
-            return [
-              pre ? "\"" + pre.replace(/[^\x00-\x7F]/g, "") + "\"" : null,
-              "\"" + groupName.replace(/[^\x00-\x7F]/g, "").replace(/"/g, "'") + "\"",
-              post? "\"" + post.replace(/[^\x00-\x7F]/g, "") + "\"" : null,
-              Math.round(Math.abs(value / 1000)) + "tkr"
-            ].filter(e => e).join(",");
-          });
-        };
-        
-        const sankeyLevel = (pre: string |null, post: string|null,filter: (t: TransactionRow) => boolean, selector: (t: TransactionRow) => string) => {
-          const transactionsToInclude = ts.filter(filter);
-          const grouped = transactionsToInclude.reduce(groupBy(selector), {} as {[key: string]: number});
-          const sankeyRows = toSankeyRows(pre, grouped, post);
-          return sankeyRows;
-        }
-        const categoryGroups = Array.from(ts.reduce((acc: Set<string>, t: TransactionRow) => { return acc.add(t.category_group as string) }, new Set<string>())).filter(e => e);
-        const categories = Array.from(ts.reduce((acc: Set<string>, t: TransactionRow) => { return acc.add(t.category as string) }, new Set<string>())).filter(e => e);
-        const sankeySpec = [
-          sankeyLevel(null, "Inflow", isIncome, byCategory),
-          sankeyLevel("Inflow", null, isExpense, byCategoryGroup),
-          ...categoryGroups.map((group) => sankeyLevel(group, null, inGroup(group), byCategory)),
-          //...categories.map((category) => sankeyLevel(category, null, inCategory(category), byPayee)),
-        ].flat();
-        const header = "---\nconfig:\n  sankey:\n    showValues: false\n---\nsankey-beta\n";
-        fs.writeFileSync('./sankey.tmp', header + sankeySpec.join('\n'));
-
-        const sankeyColumns = ["From", "To", "Weight"];
       }
 
       if (!noEarMarkedTransactions) {
