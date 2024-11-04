@@ -5,7 +5,7 @@ Does also a bunch of statistics that might not be helpful for other folks.
 Please feel free to pick any code you find useful.
 
 `yarn run quick-sync` will sync the budget without running a bank sync.
-
+`yarn run full-sync` will sync the budget without running a bank sync.
 
 For full control: `npx ts-node index.ts <flags>`
 ```
