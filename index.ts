@@ -222,7 +222,7 @@ function calculateCategoryStats(categories: {[key: string]: Category}, ts: Array
 }
 
 function normalizeTransactionByCadence(transaction: TransactionRow): TransactionRow {
-  const regex = /\#assume\-cadence\:(?<amountStr>\d+)(?<unitStr>[my])/g;
+  const regex = /\#assume(d)?\-((cadence)|(interval))\:(?<amountStr>\d+)(?<unitStr>[my])/g;
   if (transaction.notes && transaction.notes.match(regex) === null || transaction.notes === null) {
     return transaction;
   }
@@ -255,7 +255,7 @@ function normalizeTransactionByCadence(transaction: TransactionRow): Transaction
 }
 
 function generateEarmarkedTransactions(ts: Array<TransactionRow>) {
-    const earmarkReceivingAccounts = ["[Santander] Sparkonto Tobi", "[Santander] Sparkonto+", "[Danske] Future Us", "[REV][EUR] Tobi Sparen"]
+    const earmarkReceivingAccounts = ["[Santander] Sparkonto Tobi", "[Santander] Sparkonto+", "[Danske] Future Us", "[REV][EUR] Tobi Sparen", "[Resurs] Sparkonto", "[Landshypothek] Bolån"]
     // Extract all Transactions that are ear marked
     const earmarkedTransactions = ts.filter((t) => 
         earmarkReceivingAccounts.includes(t.account_name) &&
