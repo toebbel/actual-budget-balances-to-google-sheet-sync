@@ -255,7 +255,7 @@ function normalizeTransactionByCadence(transaction: TransactionRow): Transaction
 }
 
 function generateEarmarkedTransactions(ts: Array<TransactionRow>) {
-    const earmarkReceivingAccounts = ["[Santander] Sparkonto Tobi", "[Santander] Sparkonto+", "[Danske] Future Us", "[REV][EUR] Tobi Sparen", "[Resurs] Sparkonto", "[Landshypothek] Bolån"]
+    const earmarkReceivingAccounts = ["[Santander] Sparkonto Tobi", "[Santander] Sparkonto+", "[Danske] Future Us", "[REV][EUR] Tobi Sparen", "[Resurs] Sparkonto", "🏡 Hjälmvik"]
     // Extract all Transactions that are ear marked
     const earmarkedTransactions = ts.filter((t) => 
         earmarkReceivingAccounts.includes(t.account_name) &&
