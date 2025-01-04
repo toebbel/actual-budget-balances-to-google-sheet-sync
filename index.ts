@@ -203,9 +203,9 @@ function calculateCategoryStats(categories: {[key: string]: Category}, ts: Array
     const transactions = ts.filter((t) => t.category === c.name);
     const oldest_transaction = transactions.map((t) => t.transaction_date).reduce((a, b) => a < b ? a : b, new Date());
     const number_months = differenceInMonths(new Date(), oldest_transaction) + 1;
-    const months = Array<number>(number_months)
+    const months = Array<number>(number_months).fill(0);
     transactions.forEach((t) => {
-      const idx = differenceInMonths(t.transaction_date, oldest_transaction);
+      const idx = differenceInMonths(new Date(), t.transaction_date);
       months[idx] = (months[idx] || 0) + t.amount;
     })
     const weighted_average = months.map((m, i) => m * weights[i]).reduce((a, b) => a + b, 0) / weights.slice(0, months.length).reduce((a, b) => a + b, 0);
