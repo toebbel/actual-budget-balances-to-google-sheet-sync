@@ -18,4 +18,4 @@ RUN yarn install
 COPY . .
 
 # Set the entrypoint to run the full-sync script
-ENTRYPOINT ["yarn", "run", "full-sync"]
+CMD ["yarn", "run", "full-sync"]
