@@ -248,7 +248,7 @@ function normalizeTransactionByCadence(transaction: TransactionRow): Transaction
     transaction.payee,
     transaction.category_group,
     transaction.category,
-    transaction.amount,
+    normalizedAmount,
     `normalized to ${normalizedAmount}` + transaction.notes,
     transaction.transfer_id
   );
