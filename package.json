@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "@actual-app/api": "25.7.1",
+    "@actual-app/api": "^25.8.0",
     "@google-cloud/local-auth": "3.0.1",
     "cmd-ts": "^0.13.0",
     "date-fns": "^4.1.0",
