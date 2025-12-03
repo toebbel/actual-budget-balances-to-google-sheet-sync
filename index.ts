@@ -140,7 +140,7 @@ async function getTransactions(categoryLookup: {[key: string]: Category}, payeeL
 }
 
 async function loadCategories(): Promise<{[key: string]: Category}> {
-  const categoryGroups = (await api.getCategoryGroups()).reduce((a: {[key: string]: string}, cg: any) => { return {...a, [cg.id]: cg.name} }, {} as {[key: string]: string});
+  const categoryGroups = (await api.getCategoryGroups()).reduce((a: {[key: string]: string}, cg: any) => { return {...a, [cg.id]: cg.name} }, {} as {[key: string]: string}) as {[key: string]: string};
   return (await api.getCategories()).reduce((a: {[key: string]: Category}, c: any) => {
     return {
       ...a,
