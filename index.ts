@@ -98,7 +98,7 @@ async function updateValues(auth: GoogleAuth, spreadsheetId: String | undefined,
 async function getTransactions(categoryLookup: {[key: string]: Category}, payeeLookup: {[key: string]: string}): Promise<Array<TransactionRow>> {
   let accounts = await api.getAccounts();
   const allTransactionsP = accounts.map(async (account: any) => {
-    const transactions = await api.getTransactions(account.id, null, null);
+    const transactions = await api.getTransactions(account.id, '1970-01-01', '2099-12-31');
     return transactions.flatMap((t: any) => {
       if (t.subtransactions.length > 0) {
         return t.subtransactions.map((st: any) => {
@@ -154,8 +154,8 @@ async function loadPayees(): Promise<{[key: string]: string}> {
 
 async function getAccountNamesAndBalances(): Promise<Array<AccountInfo>> {
   let accounts = await api.getAccounts();
-	const accountNamesAndBalances = (await Promise.all(accounts.filter((a) => !a.closed).map(async (account) => {
-    const transactions = await api.getTransactions(account.id, null, null)
+	const accountNamesAndBalances = (await Promise.all(accounts.filter((a: any) => !a.closed).map(async (account: any) => {
+    const transactions = await api.getTransactions(account.id, '1970-01-01', '2099-12-31')
     const balance = transactions.map((t: any) => t.amount).reduce((a: number, b: number) => a + b, 0)
     return new AccountInfo(account.name, api.utils.amountToInteger(balance) / 10000, !account.closed)
 	}))).sort((a: AccountInfo, b: AccountInfo) => {
@@ -255,7 +255,7 @@ function normalizeTransactionByCadence(transaction: TransactionRow): Transaction
 }
 
 function generateEarmarkedTransactions(ts: Array<TransactionRow>) {
-    const earmarkReceivingAccounts = ["[Danske] Future Us", "[REV][EUR] Tobi Sparen", "[Resurs] Sparkonto", "[Landshypothek] Bolån"]
+    const earmarkReceivingAccounts = ["[Danske] Future Us", "[REV][EUR] Tobi Sparen", "[Resurs] Sparkonto", "[Landshypothek] Bolån", "[Santander] Sparkonto+", "[Santander] Sparkonto Tobi"]
     // Extract all Transactions that are ear marked
     const regex = /#ear:([A-Za-zäüöÄåÅøÖÜÄ0-9]+)/i;
     
@@ -338,16 +338,16 @@ const mainCommand = command({
   },
   handler: async ({ noBankSync, noCalcCategoryStats, noEarMarkedTransactions, noAccountBalances }) => {
     await api.init({
-      serverURL: process.env.ACTUAL_SERVER_URL,
-      password: process.env.ACTUAL_SERVER_PASSWORD,
+      serverURL: process.env.ACTUAL_SERVER_URL!,
+      password: process.env.ACTUAL_SERVER_PASSWORD!,
     });
     console.log("👇 Downloading budget");
-    await api.downloadBudget(process.env.ACTUAL_BUDGET_ID, { password: process.env.ACTUAL_BUDGET_PASSWORD });
+    await api.downloadBudget(process.env.ACTUAL_BUDGET_ID!, { password: process.env.ACTUAL_BUDGET_PASSWORD });
 
     if (!noBankSync) {
       console.log(`🏦 Syncing accounts from bank`);
       await Promise.all((await api.getAccounts()).filter((a: any) => !a.closed).map(async (account: any) => {
-        await api.runBankSync(account.id).catch().finally(() => console.log(`✅ Synced account ${account.name}`));
+        await api.runBankSync({ accountId: account.id }).catch().finally(() => console.log(`✅ Synced account ${account.name}`));
       }));
     }
 
